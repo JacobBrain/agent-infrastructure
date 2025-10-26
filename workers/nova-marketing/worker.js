@@ -208,7 +208,7 @@ export default {
   
     console.log('Calling Anthropic API...');
     console.log('API Key prefix:', apiKey?.substring(0, 20));
-    console.log('Model:', 'claude-sonnet-4-20241022');
+    console.log('Model:', 'claude-sonnet-4-20250514');
   
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -218,7 +218,7 @@ export default {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20241022',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 2000,
         messages: [{
           role: 'user',
