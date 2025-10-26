@@ -1,266 +1,203 @@
 # Jacob's Agent Infrastructure
 
-AI agents running on Cloudflare Workers, managed via GitHub, and callable through multiple triggers (MCP, webhooks, email - future).
+AI agents running on Cloudflare Workers, managed via GitHub, and callable through multiple triggers (MCP, webhooks, API, email).
 
 ## Overview
 
-This repository manages a suite of AI agents that automate tasks across Jacob's business operations. Each agent specializes in a specific domain but shares common infrastructure and knowledge bases.
+This repository manages autonomous AI agents that automate business operations across Jacob's fractional COO practice and personal workflows. Each agent specializes in a specific domain but shares common infrastructure and knowledge bases.
 
-**Shared Knowledge Base:** All agents can access the "AI Brain" in Notion—a centralized knowledge repository containing context about Jacob's business, communication style, processes, and strategic thinking. This ensures consistent outputs across all agents.
+**Core Principles:**
+- **Single source of truth:** Notion for knowledge, Supabase for operations, GitHub for code
+- **Modularity:** Each agent is independent and replaceable
+- **Observability:** All actions are logged and traceable
+- **Scalability:** Designed to grow from 2 agents to 20+ without architectural changes
 
-**Future Vision:** Building toward an orchestrator agent that acts as the primary interface. It will delegate specific tasks to specialized sub-agents (like Ada and Nova) based on the request, managing collaboration and consolidating results.
+**Future Vision:** Building toward an orchestrator agent that acts as the primary interface, delegating tasks to specialized sub-agents based on the request.
+
+## Documentation
+
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System design, technology choices, and architectural decisions
+- **[DEVELOPMENT.md](DEVELOPMENT.md)** - Developer guide for adding new agents
+- **[agent-registry.json](agent-registry.json)** - Machine-readable registry of all agents
 
 ---
 
 ## Current Agents
 
 ### Ada - Form Analyzer ✅ WORKING
-- **URL**: https://workmanship-form-analyzer.jacob-788.workers.dev
 - **Purpose**: Processes Tally form submissions for Workmanship ministry
 - **Trigger**: Webhook from Tally forms
-- **Output**: Formatted email to Joel with submission summary and analysis
-- **Handles**: "Request for Help" and "Apply to be a Helper" form types
-- **Status**: Operational
-- **Customization**: Email templates in `buildRequestEmail()` and `buildHelperEmail()` functions
+- **Output**: Formatted email to Joel with submission summary
+- **Handles**: "Request for Help" and "Apply to be a Helper" forms
 
 ### Nova - Marketing Writer ✅ WORKING
-- **URL**: https://marketing-writer.jacob-788.workers.dev
 - **Purpose**: Generates LinkedIn/Substack content in Jacob's voice
 - **Trigger**: MCP tool `nova_write` in Claude Desktop
-- **Knowledge Sources**: 
-  - Marketing Voice Examples database (ID: `297abcd1b44580ed8332e6bf77a8059d`)
-  - AI Brain general knowledge base
-  - Platform-specific style guides (LinkedIn, Substack)
-- **Parameters**: 
-  - `topic` - What to write about
-  - `platform` - LinkedIn or Substack
-  - `style` - Optional style notes or adjustments
+- **Knowledge**: Marketing Voice Examples database + AI Brain
 - **Status**: Operational (message tuning ongoing)
-- **Customization**: Modify system prompts in `buildSystemPrompt()` and add voice examples to Notion database
 
 ---
 
-## Infrastructure & Accounts
+## Infrastructure Stack
 
-### Cloudflare Workers
-- **Account**: jacob@jacobbrain.com
-- **Purpose**: Serverless compute platform hosting all agent workers
-- **Deployment**: Manual copy/paste from local files to Cloudflare dashboard
+### Compute: Cloudflare Workers
+- **Purpose**: Serverless hosting for all agents
 - **Cost**: Free tier (sufficient for current usage)
+- **Account**: jacob@jacobbrain.com
 
-### Anthropic API
+### Database: Supabase
+- **Purpose**: Conversation state, execution logs, agent coordination
+- **Cost**: Free tier (unlimited API requests, 500MB storage)
+- **Setup**: See [DEVELOPMENT.md](DEVELOPMENT.md) for schema and configuration
+
+### Knowledge Base: Notion
+- **Purpose**: Business context, style guides, processes
+- **AI Brain**: [241abcd1b44580609e11d2e298cdf80a](https://www.notion.so/241abcd1b44580609e11d2e298cdf80a)
+- **Voice Examples**: [297abcd1b44580ed8332e6bf77a8059d](https://www.notion.so/297abcd1b44580ed8332e6bf77a8059d)
+
+### AI Engine: Anthropic Claude
 - **Model**: `claude-sonnet-4-20250514`
-- **Purpose**: Powers all agent reasoning and content generation
-- **Cost**: Pay-per-token usage
-- **Note**: Shared across all agents via environment variables
+- **Purpose**: Content generation, reasoning, analysis
 
-### Notion
-- **Purpose**: 
-  - Knowledge base ("AI Brain") - centralized context for all agents
-  - Voice examples database - writing style reference for Nova
-  - Documentation and process storage
-- **Integration**: API access via integration token
-- **Cost**: Free (current tier)
+### Email: Resend
+- **Purpose**: Email delivery for Ada
+- **Cost**: Free tier
 
-### Resend
-- **Purpose**: Email delivery service for Ada
-- **Cost**: Free tier (sufficient for current volume)
-
-### GitHub
-- **Purpose**: Version control and code backup for all agent workers
-- **Workflow**: Edit locally → Push to GitHub → Copy to Cloudflare dashboard
-- **Note**: GitHub is not directly connected to Cloudflare; serves as source of truth
+### Version Control: GitHub
+- **Purpose**: Code backup and version history
+- **Workflow**: Edit locally → Push to GitHub → Copy to Cloudflare
 
 ---
 
-## Setup Instructions
+## Quick Start
 
-### Prerequisites
-- Cloudflare Workers account
-- Anthropic API key
-- Notion workspace with API access
-- Resend API key (for Ada only)
-- Node.js installed (for MCP server)
-- Claude Desktop installed
+### For Users
+- **Ada**: Submit forms via Tally → Automatic email notifications
+- **Nova**: In Claude Desktop, say "Nova, write a [platform] post about [topic]"
 
-### Environment Variables (Cloudflare Workers)
+### For Developers
+See **[DEVELOPMENT.md](DEVELOPMENT.md)** for complete guide on:
+- Adding new agents (step-by-step)
+- Testing procedures
+- Deployment workflows
+- Common patterns and examples
 
-**Current Configuration (Per-Worker):**
-Each worker currently has its own copy of environment variables set in the Cloudflare dashboard.
-
-**Shared Variables (Ada & Nova):**
-- `ANTHROPIC_API_KEY` - Claude API key for content generation
-- `NOTION_TOKEN` - Notion integration token for knowledge base access
-
-**Ada-Specific:**
-- `RESEND_API_KEY` - Email service authentication
-
-**Nova-Specific:**
-- `NOTION_DATABASE_ID` - Marketing Voice Examples database ID: `297abcd1b44580ed8332e6bf77a8059d`
-
-**Future Improvement:**
-Investigating Cloudflare's ability to set environment variables at a higher account or project level. This would allow:
-- Single source of truth for shared credentials
-- Update API keys once, apply to all workers
-- Easier credential rotation as agent count scales
-
-### Notion Setup
-
-#### AI Brain (Shared Knowledge Base)
-- **Location**: [AI Brain page](https://www.notion.so/241abcd1b44580609e11d2e298cdf80a)
-- **Purpose**: Central knowledge repository accessible by all agents
-- **Contains**: 
-  - Jacob's background, values, and communication preferences
-  - Business processes and methodologies
-  - Client context and project information
-  - Strategic frameworks and decision-making guidelines
-
-#### Marketing Voice Examples Database
-- **Database ID**: `297abcd1b44580ed8332e6bf77a8059d`
-- **Required Properties**:
-  - `Content` (Text) - The actual post/content example
-  - `Platform` (Select) - LinkedIn, Substack
-  - `Tag` (Multi-select) - Categories like philosophy, productivity, leadership, etc.
-- **Purpose**: Provides Nova with examples of Jacob's writing style across platforms
-- **Usage**: Nova queries this database to match tone, structure, and voice when generating content
-
-**Getting Notion Credentials:**
-1. Go to https://www.notion.so/my-integrations
-2. Create new integration → Copy integration token
-3. Share your databases/pages with the integration
-4. Extract database ID from the database URL (32-character hex string)
-
-### MCP Server Configuration
-
-**What it does:**
-The MCP (Model Context Protocol) server acts as a bridge between Claude Desktop and Cloudflare Workers. It registers custom tools (like `nova_write`) that appear in Claude Desktop, routes requests to the appropriate worker, and returns results.
-
-**Location:** `C:\Users\jbrai\agents-mcp\server.js`
-
-**Claude Desktop Config:** `%APPDATA%\Claude\claude_desktop_config.json`
-
-**Usage in Claude Desktop:**
-Simply say: "Nova, write a LinkedIn post about [topic]" and the MCP server will:
-1. Parse your request
-2. Call the Nova worker with appropriate parameters
-3. Return the generated content
+### For Architects
+See **[ARCHITECTURE.md](ARCHITECTURE.md)** for:
+- System design rationale
+- Technology choices and trade-offs
+- State management strategy
+- Future roadmap and scaling plans
 
 ---
 
-## Deployment Workflow
+## Project Structure
 
-**Current Process:**
-1. Edit code in `/workers/[agent-name]/worker.js` using Cursor
-2. Save changes
-3. Push to GitHub using GitHub Desktop (for version control)
-4. Copy updated code to Cloudflare Workers dashboard
-5. Click "Save and Deploy" in Cloudflare
+```
+/
+├── README.md                      # This file
+├── ARCHITECTURE.md                # System design and decisions
+├── DEVELOPMENT.md                 # Developer guide
+├── agent-registry.json            # Machine-readable agent metadata
+├── /workers
+│   ├── /ada-form-analyzer
+│   │   └── worker.js
+│   └── /nova-marketing
+│       └── worker.js
+└── /lib (future)
+    ├── supabase.js               # Database helpers
+    ├── agent-interface.js        # Standard request/response format
+    └── agent-registry.js         # Registry query functions
+```
 
-**Note:** GitHub and Cloudflare are not directly connected. Manual copy/paste is required to deploy changes.
+---
+
+## Environment Variables
+
+**Shared across agents:**
+- `ANTHROPIC_API_KEY` - Claude API key
+- `NOTION_TOKEN` - Notion integration token
+- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_KEY` - Supabase API key
+
+**Agent-specific:**
+- `RESEND_API_KEY` - Email service (Ada only)
+- `NOTION_DATABASE_ID` - Voice examples database (Nova only)
+
+**Future**: Investigating Cloudflare account-level variables to centralize credential management.
+
+---
+
+## Deployment
+
+### Current Process
+1. Edit code in Cursor (local IDE)
+2. Commit and push to GitHub (version control)
+3. Copy code to Cloudflare Workers dashboard
+4. Click "Save and Deploy"
+5. Test via health check endpoint
+
+### Future Process (Planned)
+1. Edit code locally
+2. Run `wrangler deploy` from terminal
+3. Automatic testing and deployment
+4. Commit to GitHub post-deployment
 
 ---
 
 ## Testing
 
-### Ada
-- Submit a test form via Tally webhook
-- Check Resend dashboard for delivery confirmation
-- Verify email received at joel0954@comcast.net
-
-### Nova
-- In Claude Desktop: "Nova, write a LinkedIn post about [topic]"
-- Or: "Nova, create a Substack note about [subject]"
-- Review generated content and provide feedback for refinement
-
-### Worker Health Check
-Both workers expose GET endpoints to verify they're running:
+### Health Checks
+Each agent exposes a GET endpoint that returns status:
 - Ada: https://workmanship-form-analyzer.jacob-788.workers.dev
 - Nova: https://marketing-writer.jacob-788.workers.dev
 
-Returns JSON with environment variable status and worker health info.
+### Functional Testing
+- **Ada**: Submit test form via Tally webhook
+- **Nova**: In Claude Desktop, request a test post
+- **Logs**: Check Supabase `agent_executions` table for execution history
 
 ---
 
 ## Future Roadmap
 
-### Orchestrator Agent (Planned)
-A manager-level agent that:
-- Serves as the primary interface for all agent interactions
-- Routes requests to specialized sub-agents (Ada, Nova, etc.)
-- Coordinates multi-step workflows requiring multiple agents
-- Consolidates results and handles complex decision-making
-- Maintains conversation context across agent handoffs
+### Near-Term (Next 3 Months)
+1. **Orchestrator agent** - Central coordinator for all sub-agents
+2. **5-8 additional agents** - Email handler, scheduler, research agent, etc.
+3. **Email triggers** - Send emails to trigger agent workflows
+4. **Improved routing** - LLM-based agent selection
 
-### Additional Triggers (Planned)
-- **Email**: Send requests via email to trigger agent workflows
-- **Slack**: Integrate with team communication
-- **API**: Direct REST API access for custom integrations
-- **Scheduled**: Cron-based automation for recurring tasks
+### Medium-Term (3-6 Months)
+1. **Queue-based async** - For long-running tasks
+2. **Human-in-the-loop** - Approval workflows for sensitive actions
+3. **Multi-agent coordination** - Complex workflows spanning multiple agents
+4. **Web dashboard** - View conversations, logs, and agent status
 
-### Shared Variable Management (Investigation)
-Research Cloudflare's capabilities for:
-- Account-level or project-level environment variables
-- Centralized secrets management
-- Easier credential rotation across multiple workers
+### Long-Term (6-12 Months)
+1. **Voice interface** - Phone/voice triggers
+2. **Proactive agents** - Suggest actions without prompting
+3. **Learning loop** - Agents improve from feedback
+4. **Client-specific agents** - Custom agents per client engagement
 
 ---
 
-## Customization Guide
+## Support & Contributing
 
-### Adding Voice Examples to Nova
-1. Open Marketing Voice Examples database in Notion
-2. Add new entries with:
-   - Actual content from LinkedIn/Substack posts
-   - Platform tag
-   - Content category tags
-3. Nova will automatically use new examples on next generation
+### Getting Help
+- **Documentation**: Check ARCHITECTURE.md and DEVELOPMENT.md
+- **Issues**: Review similar agent code (Ada or Nova)
+- **Questions**: Ask in Claude Project: "Agent Infrastructure"
 
-### Modifying Email Templates (Ada)
-Edit the following functions in `/workers/ada-form-analyzer/worker.js`:
-- `buildRequestEmail()` - "Request for Help" format
-- `buildHelperEmail()` - "Apply to be a Helper" format
-
-Change subject lines, email body structure, or add/remove fields as needed.
-
-### Tuning Nova's Voice
-1. **Add examples**: More voice examples in Notion = better style matching
-2. **Adjust prompts**: Edit `buildSystemPrompt()` in worker.js to modify instructions
-3. **Platform formatting**: Modify `buildUserPrompt()` for platform-specific rules
+### Contributing
+1. Follow patterns in DEVELOPMENT.md
+2. Test thoroughly before deployment
+3. Update agent-registry.json
+4. Document any architectural decisions in ARCHITECTURE.md
 
 ---
 
-## Architecture
+## License & Ownership
 
-### Ada Flow
-```
-Tally Form Submission 
-  → Webhook POST to Ada Worker
-  → Parse form data
-  → Claude API analyzes submission
-  → Format email via template
-  → Resend API sends email
-  → Joel receives formatted summary
-```
+This is a private repository for Jacob Brain's internal agent infrastructure. Not licensed for external use.
 
-### Nova Flow
-```
-Claude Desktop User Input
-  → MCP Server intercepts request
-  → Calls Nova Worker API
-  → Nova fetches voice examples from Notion
-  → Nova searches AI Brain for context
-  → Claude API generates content
-  → Content returned to Claude Desktop
-  → User reviews/refines
-```
-
----
-
-## Version Control
-
-All code is maintained in this GitHub repository as the source of truth. Changes should be:
-1. Made in local development environment (Cursor)
-2. Committed and pushed to GitHub
-3. Manually deployed to Cloudflare Workers
-
-This ensures proper version history and rollback capability if needed.
+**Contact**: jacob@jacobbrain.com

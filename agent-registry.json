@@ -1,0 +1,141 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2025-10-26",
+  "agents": [
+    {
+      "id": "ada",
+      "name": "Ada - Form Analyzer",
+      "description": "Processes Tally form submissions for Workmanship ministry. Analyzes both 'Request for Help' and 'Apply to be a Helper' forms, then sends formatted email summaries to ministry coordinator.",
+      "url": "https://workmanship-form-analyzer.jacob-788.workers.dev",
+      "capabilities": [
+        "form_analysis",
+        "email_sending",
+        "ministry_coordination",
+        "request_triage"
+      ],
+      "triggers": [
+        "webhook"
+      ],
+      "input_schema": {
+        "formData": {
+          "type": "object",
+          "required": true,
+          "description": "Tally webhook payload containing form submission data"
+        },
+        "formType": {
+          "type": "string",
+          "required": false,
+          "description": "Optional: 'request' or 'helper'. Auto-detected if not provided."
+        }
+      },
+      "output_schema": {
+        "emailSent": {
+          "type": "boolean",
+          "description": "Whether email was successfully sent"
+        },
+        "formType": {
+          "type": "string",
+          "description": "Type of form processed: 'request' or 'helper'"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Brief summary of the submission"
+        }
+      },
+      "requires_env_vars": [
+        "ANTHROPIC_API_KEY",
+        "RESEND_API_KEY"
+      ],
+      "status": "production",
+      "version": "1.0.0",
+      "created_date": "2024-10-15",
+      "last_modified": "2025-10-23"
+    },
+    {
+      "id": "nova",
+      "name": "Nova - Marketing Writer",
+      "description": "Generates LinkedIn and Substack content in Jacob's voice. Pulls from Marketing Voice Examples database and AI Brain knowledge base to match tone, style, and brand guidelines.",
+      "url": "https://marketing-writer.jacob-788.workers.dev",
+      "capabilities": [
+        "content_generation",
+        "linkedin_posts",
+        "substack_notes",
+        "voice_matching",
+        "brand_consistency"
+      ],
+      "triggers": [
+        "mcp",
+        "api"
+      ],
+      "input_schema": {
+        "topic": {
+          "type": "string",
+          "required": true,
+          "description": "What to write about"
+        },
+        "platform": {
+          "type": "string",
+          "required": true,
+          "enum": ["LinkedIn", "Substack"],
+          "description": "Target platform for content"
+        },
+        "style": {
+          "type": "string",
+          "required": false,
+          "description": "Optional style notes or adjustments (e.g., 'make it shorter', 'more contrarian')"
+        }
+      },
+      "output_schema": {
+        "draft": {
+          "type": "string",
+          "description": "Generated content ready to post"
+        },
+        "voiceExamplesUsed": {
+          "type": "number",
+          "description": "Number of voice examples referenced"
+        },
+        "contextDocsUsed": {
+          "type": "number",
+          "description": "Number of Notion docs used for context"
+        }
+      },
+      "requires_env_vars": [
+        "ANTHROPIC_API_KEY",
+        "NOTION_TOKEN",
+        "NOTION_DATABASE_ID"
+      ],
+      "notion_dependencies": {
+        "databases": [
+          {
+            "id": "297abcd1b44580ed8332e6bf77a8059d",
+            "name": "Marketing Voice Examples",
+            "purpose": "Examples of Jacob's writing style across platforms"
+          }
+        ],
+        "pages": [
+          {
+            "id": "241abcd1b44580609e11d2e298cdf80a",
+            "name": "AI Brain",
+            "purpose": "General knowledge base with business context"
+          },
+          {
+            "id": "241abcd1b445805399ccddc34a006653",
+            "name": "LinkedIn Content Style Guide",
+            "purpose": "Platform-specific formatting and tone guidelines"
+          }
+        ]
+      },
+      "status": "production",
+      "version": "1.1.0",
+      "created_date": "2024-10-20",
+      "last_modified": "2025-10-26",
+      "notes": "Message tuning ongoing. Model updated to claude-sonnet-4-20250514."
+    }
+  ],
+  "metadata": {
+    "total_agents": 2,
+    "production_count": 2,
+    "development_count": 0,
+    "next_agent_id": 3
+  }
+}
