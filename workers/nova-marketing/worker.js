@@ -203,12 +203,16 @@ export default {
   }
   
   async function generateContent(topic, platform, style, voiceExamples, contextDocs, apiKey) {
+    console.log('=== generateContent() called ===');
+    console.log('API key prefix:', apiKey?.substring(0, 20));
+    console.log('Model:', 'claude-sonnet-4-20250514');
+    console.log('Topic:', topic);
+    console.log('Platform:', platform);
+    
     const systemPrompt = buildSystemPrompt(platform, voiceExamples, contextDocs);
     const userPrompt = buildUserPrompt(topic, platform, style);
   
     console.log('Calling Anthropic API...');
-    console.log('API Key prefix:', apiKey?.substring(0, 20));
-    console.log('Model:', 'claude-sonnet-4-20250514');
   
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
