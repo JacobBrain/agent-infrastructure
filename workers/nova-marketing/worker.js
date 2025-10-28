@@ -264,41 +264,81 @@ export default {
     console.log('Calling Anthropic API...');
     console.log('API Key prefix:', apiKey?.substring(0, 20));
     console.log('Model:', 'claude-sonnet-4-20250514');
+    
+    // Log request body for debugging
+    const requestBody = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: userPrompt
+      }],
+      system: systemPrompt
+    };
+    
+    console.log('Request body length:', JSON.stringify(requestBody).length);
+    console.log('System prompt length:', systemPrompt.length);
+    console.log('User prompt length:', userPrompt.length);
+    
+    // Validate JSON before sending
+    let requestBodyJson;
+    try {
+      requestBodyJson = JSON.stringify(requestBody);
+      console.log('Request body JSON is valid');
+    } catch (e) {
+      console.error('Invalid JSON in request body:', e.message);
+      throw new Error(`Invalid JSON in request body: ${e.message}`);
+    }
   
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01'
+        'anthropic-version': '2024-06-01'
       },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
-        messages: [{
-          role: 'user',
-          content: userPrompt
-        }],
-        system: systemPrompt
-      })
+      body: requestBodyJson
     });
   
     console.log('Anthropic response status:', response.status);
+    console.log('Anthropic response headers:', Object.fromEntries(response.headers.entries()));
     
     const responseText = await response.text();
-    console.log('Anthropic raw response:', responseText);
+    console.log('Anthropic raw response length:', responseText.length);
+    console.log('Anthropic raw response (first 500 chars):', responseText.substring(0, 500));
+    
+    // Check for empty response
+    if (!responseText || responseText.trim() === '') {
+      throw new Error(`Empty response from Anthropic API. Status: ${response.status}`);
+    }
     
     let data;
     try {
       data = JSON.parse(responseText);
+      console.log('Successfully parsed JSON response');
     } catch (e) {
-      throw new Error(`Failed to parse Anthropic response: ${responseText}`);
+      console.error('JSON parse error:', e.message);
+      console.error('Response that failed to parse:', responseText);
+      throw new Error(`Failed to parse Anthropic response as JSON: ${e.message}. Response: ${responseText.substring(0, 200)}...`);
     }
     
     if (!response.ok) {
+      console.error('Anthropic API error response:', data);
       throw new Error(`Claude API error (${response.status}): ${JSON.stringify(data)}`);
     }
+    
+    // Check if response has expected structure
+    if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
+      console.error('Unexpected response structure:', data);
+      throw new Error(`Unexpected response structure from Anthropic: ${JSON.stringify(data)}`);
+    }
+    
+    if (!data.content[0].text) {
+      console.error('No text content in response:', data.content[0]);
+      throw new Error(`No text content in Anthropic response: ${JSON.stringify(data.content[0])}`);
+    }
   
+    console.log('Successfully generated content, length:', data.content[0].text.length);
     return data.content[0].text;
   }
   
