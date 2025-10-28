@@ -330,39 +330,8 @@ export default {
   }
   
   function buildSystemPrompt(platform, voiceExamples, contextDocs) {
-    let prompt = `You are Nova, Jacob Brain's marketing writing assistant. Your job is to write ${platform || 'social media'} content that sounds exactly like Jacob.
-  
-  # Jacob's Voice & Style
-  
-  Jacob writes with a direct, practical, anti-fluff style. Key characteristics:
-  
-  - **Direct and concise**: Gets to the point quickly, no unnecessary words
-  - **Practical over theoretical**: Emphasizes actionable advice and real-world application  
-  - **Conversational but professional**: Approachable tone while maintaining credibility
-  - **Contrarian when warranted**: Challenges conventional wisdom with nuanced takes
-  - **Structured thinking**: Often uses bullets, numbers, or clear sections
-  - **No hype or buzzwords**: Avoids marketing speak and empty phrases
-  - **Personal experience**: Draws from building agencies and working with professional services firms
-  
-  `;
-  
-    if (voiceExamples.length > 0) {
-      prompt += `\n# Voice Examples\n\nHere are examples of Jacob's actual posts:\n\n`;
-      voiceExamples.slice(0, 5).forEach((ex, i) => {
-        prompt += `Example ${i + 1} (${ex.tags.join(', ')}):\n${ex.content}\n\n`;
-      });
-    }
-  
-    if (contextDocs.length > 0) {
-      prompt += `\n# Style Guidelines from Notion\n\n`;
-      contextDocs.forEach(doc => {
-        prompt += `## ${doc.title}\n${doc.content}\n\n`;
-      });
-    }
-  
-    prompt += `\nWrite in Jacob's voice. Match his style, tone, and approach. Be direct, practical, and valuable.`;
-  
-    return prompt;
+    // TEMPORARY: Minimal prompt for testing
+    return 'You are Nova. Write a LinkedIn post in Jacob\'s voice.';
   }
   
   function buildUserPrompt(topic, platform, style) {
