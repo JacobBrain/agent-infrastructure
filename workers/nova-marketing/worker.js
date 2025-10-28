@@ -21,9 +21,7 @@ export default {
           message: 'Nova is running',
           hasAnthropicKey: !!env.ANTHROPIC_API_KEY,
           hasNotionToken: !!env.NOTION_TOKEN,
-          hasNotionDatabase: !!env.NOTION_DATABASE_ID,
-          hasSupabaseUrl: !!env.SUPABASE_URL,
-          hasSupabaseKey: !!env.SUPABASE_KEY
+          hasNotionDatabase: !!env.NOTION_DATABASE_ID
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -36,27 +34,10 @@ export default {
         });
       }
   
-      // Track execution time and ID
-      const startTime = Date.now();
-      let executionId = null;
-  
       try {
         const { topic, platform, style } = await request.json();
         
         console.log('Request received:', { topic, platform, style });
-
-        // Start execution logging
-        executionId = await logExecutionStart(
-          env.SUPABASE_URL,
-          env.SUPABASE_KEY,
-          null, // no conversationId for Nova (MCP/API triggered)
-          'nova',
-          {
-            topic: topic,
-            platform: platform,
-            style: style || null
-          }
-        );
   
         // Fetch voice examples from Notion
         console.log('Fetching voice examples from Notion...');
@@ -78,58 +59,22 @@ export default {
           contextDocs,
           env.ANTHROPIC_API_KEY
         );
-
-        const output = {
-          draft: draft,
-          voiceExamplesUsed: voiceExamples.length,
-          contextDocsUsed: contextDocs.length
-        };
-
-        // Log successful execution
-        const duration = Date.now() - startTime;
-        await logExecutionComplete(
-          env.SUPABASE_URL,
-          env.SUPABASE_KEY,
-          executionId,
-          output,
-          duration
-        );
   
         return new Response(JSON.stringify({
           success: true,
-          output: output,
-          error: null,
-          metadata: {
-            agentId: 'nova',
-            executionId: executionId,
-            timestamp: new Date().toISOString()
-          }
+          draft: draft,
+          voiceExamplesUsed: voiceExamples.length,
+          contextDocsUsed: contextDocs.length
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
   
       } catch (error) {
         console.error('Error:', error);
-
-        // Log failed execution
-        const duration = Date.now() - startTime;
-        await logExecutionError(
-          env.SUPABASE_URL,
-          env.SUPABASE_KEY,
-          executionId,
-          error.message,
-          duration
-        );
-
         return new Response(JSON.stringify({
           success: false,
-          output: null,
           error: error.message,
-          metadata: {
-            agentId: 'nova',
-            executionId: executionId,
-            timestamp: new Date().toISOString()
-          }
+          stack: error.stack
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -264,74 +209,78 @@ export default {
     console.log('Calling Anthropic API...');
     console.log('API Key prefix:', apiKey?.substring(0, 20));
     console.log('Model:', 'claude-sonnet-4-20250514');
-    
-    // Log request body for debugging
-    const requestBody = {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: userPrompt
-      }],
-      system: systemPrompt
-    };
-    
-    console.log('Request body length:', JSON.stringify(requestBody).length);
-    console.log('System prompt length:', systemPrompt.length);
-    console.log('User prompt length:', userPrompt.length);
-    
-    // Validate JSON before sending
-    let requestBodyJson;
-    try {
-      requestBodyJson = JSON.stringify(requestBody);
-      console.log('Request body JSON is valid');
-    } catch (e) {
-      console.error('Invalid JSON in request body:', e.message);
-      throw new Error(`Invalid JSON in request body: ${e.message}`);
-    }
   
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': apiKey,
-        'anthropic-version': '2024-06-01'
+        'anthropic-version': '2023-06-01'
       },
-      body: requestBodyJson
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: userPrompt
+        }],
+        system: systemPrompt
+      })
     });
   
     console.log('Anthropic response status:', response.status);
-    console.log('Anthropic response headers:', Object.fromEntries(response.headers.entries()));
     
-    // Check if response failed BEFORE trying to parse as JSON
+    const responseText = await response.text();
+    console.log('Anthropic raw response:', responseText);
+    
+    let data;
+    try {
+      data = JSON.parse(responseText);
+    } catch (e) {
+      throw new Error(`Failed to parse Anthropic response: ${responseText}`);
+    }
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Anthropic API error response:', errorText);
-      throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
-    }
-    
-    // Only try to parse JSON if response is OK
-    const data = await response.json();
-    console.log('Successfully parsed JSON response');
-    
-    // Check if response has expected structure
-    if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
-      console.error('Unexpected response structure:', data);
-      throw new Error(`Unexpected response structure from Anthropic: ${JSON.stringify(data)}`);
-    }
-    
-    if (!data.content[0].text) {
-      console.error('No text content in response:', data.content[0]);
-      throw new Error(`No text content in Anthropic response: ${JSON.stringify(data.content[0])}`);
+      throw new Error(`Claude API error (${response.status}): ${JSON.stringify(data)}`);
     }
   
-    console.log('Successfully generated content, length:', data.content[0].text.length);
     return data.content[0].text;
   }
   
   function buildSystemPrompt(platform, voiceExamples, contextDocs) {
-    // TEMPORARY: Minimal prompt for testing
-    return 'You are Nova. Write a LinkedIn post in Jacob\'s voice.';
+    let prompt = `You are Nova, Jacob Brain's marketing writing assistant. Your job is to write ${platform || 'social media'} content that sounds exactly like Jacob.
+  
+  # Jacob's Voice & Style
+  
+  Jacob writes with a direct, practical, anti-fluff style. Key characteristics:
+  
+  - **Direct and concise**: Gets to the point quickly, no unnecessary words
+  - **Practical over theoretical**: Emphasizes actionable advice and real-world application  
+  - **Conversational but professional**: Approachable tone while maintaining credibility
+  - **Contrarian when warranted**: Challenges conventional wisdom with nuanced takes
+  - **Structured thinking**: Often uses bullets, numbers, or clear sections
+  - **No hype or buzzwords**: Avoids marketing speak and empty phrases
+  - **Personal experience**: Draws from building agencies and working with professional services firms
+  
+  `;
+  
+    if (voiceExamples.length > 0) {
+      prompt += `\n# Voice Examples\n\nHere are examples of Jacob's actual posts:\n\n`;
+      voiceExamples.slice(0, 5).forEach((ex, i) => {
+        prompt += `Example ${i + 1} (${ex.tags.join(', ')}):\n${ex.content}\n\n`;
+      });
+    }
+  
+    if (contextDocs.length > 0) {
+      prompt += `\n# Style Guidelines from Notion\n\n`;
+      contextDocs.forEach(doc => {
+        prompt += `## ${doc.title}\n${doc.content}\n\n`;
+      });
+    }
+  
+    prompt += `\nWrite in Jacob's voice. Match his style, tone, and approach. Be direct, practical, and valuable.`;
+  
+    return prompt;
   }
   
   function buildUserPrompt(topic, platform, style) {
@@ -359,92 +308,3 @@ export default {
    
     return prompt;
   }
-
-// === SUPABASE HELPER FUNCTIONS ===
-
-async function logExecutionStart(supabaseUrl, supabaseKey, conversationId, agentId, input) {
-  try {
-    const logEntry = {
-      conversation_id: conversationId || null,
-      agent_id: agentId,
-      input: input,
-      form_type: null, // Nova doesn't process forms
-      status: 'running',
-      created_at: new Date().toISOString()
-    };
-
-    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`,
-        'Prefer': 'return=representation'
-      },
-      body: JSON.stringify(logEntry)
-    });
-
-    if (!response.ok) {
-      console.error('Failed to log execution start:', await response.text());
-      return null;
-    }
-
-    const result = await response.json();
-    return result[0]?.id || null;
-  } catch (error) {
-    console.error('Error in logExecutionStart:', error);
-    return null;
-  }
-}
-
-async function logExecutionComplete(supabaseUrl, supabaseKey, executionId, output, durationMs) {
-  if (!executionId) return;
-
-  try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
-      },
-      body: JSON.stringify({
-        output: output,
-        status: 'success',
-        duration_ms: durationMs
-      })
-    });
-
-    if (!response.ok) {
-      console.error('Failed to log execution complete:', await response.text());
-    }
-  } catch (error) {
-    console.error('Error in logExecutionComplete:', error);
-  }
-}
-
-async function logExecutionError(supabaseUrl, supabaseKey, executionId, errorMessage, durationMs) {
-  if (!executionId) return;
-
-  try {
-    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': supabaseKey,
-        'Authorization': `Bearer ${supabaseKey}`
-      },
-      body: JSON.stringify({
-        status: 'error',
-        error_message: errorMessage,
-        duration_ms: durationMs
-      })
-    });
-
-    if (!response.ok) {
-      console.error('Failed to log execution error:', await response.text());
-    }
-  } catch (error) {
-    console.error('Error in logExecutionError:', error);
-  }
-}
