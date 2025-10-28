@@ -21,7 +21,9 @@ export default {
           message: 'Nova is running',
           hasAnthropicKey: !!env.ANTHROPIC_API_KEY,
           hasNotionToken: !!env.NOTION_TOKEN,
-          hasNotionDatabase: !!env.NOTION_DATABASE_ID
+          hasNotionDatabase: !!env.NOTION_DATABASE_ID,
+          hasSupabaseUrl: !!env.SUPABASE_URL,
+          hasSupabaseKey: !!env.SUPABASE_KEY
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -34,10 +36,27 @@ export default {
         });
       }
   
+      // Track execution time and ID
+      const startTime = Date.now();
+      let executionId = null;
+  
       try {
         const { topic, platform, style } = await request.json();
         
         console.log('Request received:', { topic, platform, style });
+
+        // Start execution logging
+        executionId = await logExecutionStart(
+          env.SUPABASE_URL,
+          env.SUPABASE_KEY,
+          null, // no conversationId for Nova (MCP/API triggered)
+          'nova',
+          {
+            topic: topic,
+            platform: platform,
+            style: style || null
+          }
+        );
   
         // Fetch voice examples from Notion
         console.log('Fetching voice examples from Notion...');
@@ -59,22 +78,58 @@ export default {
           contextDocs,
           env.ANTHROPIC_API_KEY
         );
-  
-        return new Response(JSON.stringify({
-          success: true,
+
+        const output = {
           draft: draft,
           voiceExamplesUsed: voiceExamples.length,
           contextDocsUsed: contextDocs.length
+        };
+
+        // Log successful execution
+        const duration = Date.now() - startTime;
+        await logExecutionComplete(
+          env.SUPABASE_URL,
+          env.SUPABASE_KEY,
+          executionId,
+          output,
+          duration
+        );
+  
+        return new Response(JSON.stringify({
+          success: true,
+          output: output,
+          error: null,
+          metadata: {
+            agentId: 'nova',
+            executionId: executionId,
+            timestamp: new Date().toISOString()
+          }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
   
       } catch (error) {
         console.error('Error:', error);
+
+        // Log failed execution
+        const duration = Date.now() - startTime;
+        await logExecutionError(
+          env.SUPABASE_URL,
+          env.SUPABASE_KEY,
+          executionId,
+          error.message,
+          duration
+        );
+
         return new Response(JSON.stringify({
           success: false,
+          output: null,
           error: error.message,
-          stack: error.stack
+          metadata: {
+            agentId: 'nova',
+            executionId: executionId,
+            timestamp: new Date().toISOString()
+          }
         }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -308,3 +363,92 @@ export default {
    
     return prompt;
   }
+
+// === SUPABASE HELPER FUNCTIONS ===
+
+async function logExecutionStart(supabaseUrl, supabaseKey, conversationId, agentId, input) {
+  try {
+    const logEntry = {
+      conversation_id: conversationId || null,
+      agent_id: agentId,
+      input: input,
+      form_type: null, // Nova doesn't process forms
+      status: 'running',
+      created_at: new Date().toISOString()
+    };
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(logEntry)
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution start:', await response.text());
+      return null;
+    }
+
+    const result = await response.json();
+    return result[0]?.id || null;
+  } catch (error) {
+    console.error('Error in logExecutionStart:', error);
+    return null;
+  }
+}
+
+async function logExecutionComplete(supabaseUrl, supabaseKey, executionId, output, durationMs) {
+  if (!executionId) return;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        output: output,
+        status: 'success',
+        duration_ms: durationMs
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution complete:', await response.text());
+    }
+  } catch (error) {
+    console.error('Error in logExecutionComplete:', error);
+  }
+}
+
+async function logExecutionError(supabaseUrl, supabaseKey, executionId, errorMessage, durationMs) {
+  if (!executionId) return;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        status: 'error',
+        error_message: errorMessage,
+        duration_ms: durationMs
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution error:', await response.text());
+    }
+  } catch (error) {
+    console.error('Error in logExecutionError:', error);
+  }
+}

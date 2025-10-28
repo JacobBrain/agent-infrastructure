@@ -5,6 +5,54 @@ export default {
   async fetch(request, env) {
     // Add a test endpoint
     if (request.method === 'GET') {
+      // Test Supabase connection
+      if (request.url.includes('/test-supabase')) {
+        try {
+          const testLog = {
+            agent_id: 'ada-test',
+            input: { test: 'connection check' },
+            output: { success: true },
+            status: 'success',
+            duration_ms: 100,
+            created_at: new Date().toISOString()
+          };
+    
+          const supabaseResponse = await fetch(`${env.SUPABASE_URL}/rest/v1/agent_executions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'apikey': env.SUPABASE_KEY,
+              'Authorization': `Bearer ${env.SUPABASE_KEY}`,
+              'Prefer': 'return=representation'
+            },
+            body: JSON.stringify(testLog)
+          });
+    
+          const result = await supabaseResponse.json();
+    
+          return new Response(JSON.stringify({
+            success: supabaseResponse.ok,
+            status: supabaseResponse.status,
+            hasSupabaseUrl: !!env.SUPABASE_URL,
+            hasSupabaseKey: !!env.SUPABASE_KEY,
+            supabaseUrlPrefix: env.SUPABASE_URL?.substring(0, 30),
+            result: result
+          }), {
+            headers: { 'Content-Type': 'application/json' }
+          });
+        } catch (error) {
+          return new Response(JSON.stringify({
+            success: false,
+            error: error.message,
+            stack: error.stack
+          }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+      }
+    
+      // Original health check
       return new Response(JSON.stringify({
         message: 'Worker is running',
         hasResendKey: !!env.RESEND_API_KEY,
@@ -21,6 +69,10 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    // Track execution time and ID
+    const startTime = Date.now();
+    let executionId = null;
+
     try {
       // Parse incoming webhook data from Tally
       console.log('Parsing webhook data...');
@@ -33,6 +85,23 @@ export default {
       // Determine which form was submitted
       const formType = determineFormType(formData);
       console.log('Form type:', formType);
+
+      // Start execution logging
+      executionId = await logExecutionStart(
+        env.SUPABASE_URL,
+        env.SUPABASE_KEY,
+        null, // no conversationId for Ada (webhook-triggered)
+        'ada',
+        {
+          formType: formType,
+          formName: formData.formName,
+          submitterEmail: formData.fields?.find(f => f.type === 'EMAIL')?.value || 'unknown',
+          submittedAt: formData.createdAt,
+          fieldCount: formData.fields?.length || 0,
+          rawData: formData
+        },
+        formType  // Pass formType as 6th parameter
+      );
       
       // Skip Claude analysis for now - just test email sending
       console.log('Skipping Claude API...');
@@ -43,6 +112,16 @@ export default {
       console.log('Sending email...');
       const emailResult = await sendEmail(formData, analysis, formType, env.RESEND_API_KEY);
       console.log('Email result:', JSON.stringify(emailResult));
+
+      // Log successful execution
+      const duration = Date.now() - startTime;
+      await logExecutionComplete(
+        env.SUPABASE_URL,
+        env.SUPABASE_KEY,
+        executionId,
+        { emailSent: emailResult.success, formType },
+        duration
+      );
       
       return new Response(JSON.stringify({
         success: true,
@@ -63,6 +142,17 @@ export default {
     } catch (error) {
       console.error('ERROR:', error.message);
       console.error('Stack:', error.stack);
+
+      // Log failed execution
+      const duration = Date.now() - startTime;
+      await logExecutionError(
+        env.SUPABASE_URL,
+        env.SUPABASE_KEY,
+        executionId,
+        error.message,
+        duration
+      );
+
       return new Response(JSON.stringify({
         success: false,
         error: error.message,
@@ -343,4 +433,93 @@ function buildHelperEmail(formData, analysis) {
   `;
 
   return { subject, body };
+}
+
+// === SUPABASE HELPER FUNCTIONS ===
+
+async function logExecutionStart(supabaseUrl, supabaseKey, conversationId, agentId, input, formType = null) {
+  try {
+    const logEntry = {
+      conversation_id: conversationId || null,
+      agent_id: agentId,
+      input: input,
+      form_type: formType,
+      status: 'running',
+      created_at: new Date().toISOString()
+    };
+
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'return=representation'
+      },
+      body: JSON.stringify(logEntry)
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution start:', await response.text());
+      return null;
+    }
+
+    const result = await response.json();
+    return result[0]?.id || null;
+  } catch (error) {
+    console.error('Error in logExecutionStart:', error);
+    return null;
+  }
+}
+
+async function logExecutionComplete(supabaseUrl, supabaseKey, executionId, output, durationMs) {
+  if (!executionId) return;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        output: output,
+        status: 'success',
+        duration_ms: durationMs
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution complete:', await response.text());
+    }
+  } catch (error) {
+    console.error('Error in logExecutionComplete:', error);
+  }
+}
+
+async function logExecutionError(supabaseUrl, supabaseKey, executionId, errorMessage, durationMs) {
+  if (!executionId) return;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/rest/v1/agent_executions?id=eq.${executionId}`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        status: 'error',
+        error_message: errorMessage,
+        duration_ms: durationMs
+      })
+    });
+
+    if (!response.ok) {
+      console.error('Failed to log execution error:', await response.text());
+    }
+  } catch (error) {
+    console.error('Error in logExecutionError:', error);
+  }
 }
