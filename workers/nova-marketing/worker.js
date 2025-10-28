@@ -303,29 +303,16 @@ export default {
     console.log('Anthropic response status:', response.status);
     console.log('Anthropic response headers:', Object.fromEntries(response.headers.entries()));
     
-    const responseText = await response.text();
-    console.log('Anthropic raw response length:', responseText.length);
-    console.log('Anthropic raw response (first 500 chars):', responseText.substring(0, 500));
-    
-    // Check for empty response
-    if (!responseText || responseText.trim() === '') {
-      throw new Error(`Empty response from Anthropic API. Status: ${response.status}`);
-    }
-    
-    let data;
-    try {
-      data = JSON.parse(responseText);
-      console.log('Successfully parsed JSON response');
-    } catch (e) {
-      console.error('JSON parse error:', e.message);
-      console.error('Response that failed to parse:', responseText);
-      throw new Error(`Failed to parse Anthropic response as JSON: ${e.message}. Response: ${responseText.substring(0, 200)}...`);
-    }
-    
+    // Check if response failed BEFORE trying to parse as JSON
     if (!response.ok) {
-      console.error('Anthropic API error response:', data);
-      throw new Error(`Claude API error (${response.status}): ${JSON.stringify(data)}`);
+      const errorText = await response.text();
+      console.error('Anthropic API error response:', errorText);
+      throw new Error(`Anthropic API error (${response.status}): ${errorText}`);
     }
+    
+    // Only try to parse JSON if response is OK
+    const data = await response.json();
+    console.log('Successfully parsed JSON response');
     
     // Check if response has expected structure
     if (!data.content || !Array.isArray(data.content) || data.content.length === 0) {
