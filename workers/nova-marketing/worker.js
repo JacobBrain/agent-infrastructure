@@ -85,6 +85,10 @@ export default {
   
   async function getVoiceExamples(notionToken, databaseId, platform) {
     try {
+      console.log('Database ID:', databaseId);
+      console.log('Platform filter:', platform);
+      
+      // First, try WITHOUT filter to see if we can access the database at all
       const response = await fetch(`https://api.notion.com/v1/databases/${databaseId}/query`, {
         method: 'POST',
         headers: {
@@ -93,15 +97,14 @@ export default {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          filter: platform ? {
-            property: 'Platform',
-            select: {
-              equals: platform
-            }
-          } : undefined,
           page_size: 10
+          // Removed filter temporarily
         })
       });
+
+      console.log('Notion response status:', response.status);
+      const responseText = await response.text();
+      console.log('Notion response body:', responseText);
   
       if (!response.ok) {
         const error = await response.text();
