@@ -114,11 +114,13 @@ See **[ARCHITECTURE.md](ARCHITECTURE.md)** for:
 
 ## Environment Variables
 
-**Shared across agents:**
+**Shared across all agents:**
 - `ANTHROPIC_API_KEY` - Claude API key
-- `NOTION_TOKEN` - Notion integration token
-- `SUPABASE_URL` - Supabase project URL
+- `SUPABASE_URL` - Supabase project URL  
 - `SUPABASE_KEY` - Supabase API key
+
+**Shared across some agents:**
+- `NOTION_TOKEN` - Notion integration token (Ada, Nova)
 
 **Agent-specific:**
 - `RESEND_API_KEY` - Email service (Ada only)

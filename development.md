@@ -205,10 +205,16 @@ Edit `/agent-registry.json`:
 In Cloudflare Workers dashboard:
 1. Go to Worker settings
 2. Add environment variables (Text type):
-   - `ANTHROPIC_API_KEY` (if needed)
-   - `SUPABASE_URL` (if needed)
-   - `SUPABASE_KEY` (if needed)
-   - Any agent-specific keys
+
+**Standard environment variables (all agents should have):**
+- ANTHROPIC_API_KEY (if using Claude)
+- SUPABASE_URL (for logging)
+- SUPABASE_KEY (for logging)
+
+**Agent-specific:**
+- NOTION_TOKEN (if using Notion)
+- RESEND_API_KEY (if sending email)
+- etc.
 
 **Note:** In the future, these will be centralized at account level.
 
@@ -408,25 +414,53 @@ async function searchNotion(query, env) {
 
 ### Logging to Supabase
 
+Note: All logging functions are available in /lib/supabase.js. Since we're currently deploying via copy/paste to Cloudflare dashboard, copy these functions into your worker file. When Wrangler CLI is set up, you'll be able to import them directly.
+
+See /lib/supabase.js for the complete implementations of:
+- logExecutionStart()
+- logExecutionComplete() 
+- logExecutionError()
+- getOrCreateConversation()
+- saveMessage()
+
+Example usage in a worker:
+
 ```javascript
-async function logToSupabase(url, key, table, data) {
-  const response = await fetch(`${url}/rest/v1/${table}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': key,
-      'Authorization': `Bearer ${key}`,
-      'Prefer': 'return=representation'
-    },
-    body: JSON.stringify(data)
-  });
+async function processRequest(input, env) {
+  const startTime = Date.now();
+  const executionId = await logExecutionStart(
+    env.SUPABASE_URL,
+    env.SUPABASE_KEY,
+    null,
+    'your-agent-id',
+    input
+  );
 
-  if (!response.ok) {
-    console.error('Supabase logging failed:', await response.text());
-    // Don't throw - logging failure shouldn't break agent
+  try {
+    // Your agent logic here
+    const result = await doWork(input);
+    
+    const duration = Date.now() - startTime;
+    await logExecutionComplete(
+      env.SUPABASE_URL,
+      env.SUPABASE_KEY,
+      executionId,
+      result,
+      duration
+    );
+    
+    return result;
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    await logExecutionError(
+      env.SUPABASE_URL,
+      env.SUPABASE_KEY,
+      executionId,
+      error.message,
+      duration
+    );
+    throw error;
   }
-
-  return await response.json();
 }
 ```
 

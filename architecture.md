@@ -125,6 +125,15 @@ This makes agents interchangeable and simplifies orchestration logic.
          │ Resend API                │ Notion API
          ▼                           ▼
     Joel's Email              Voice Examples DB
+         │                           │
+         └───────────┬───────────────┘
+                     │
+                     ▼
+              ┌───────────────┐
+              │   Supabase    │
+              │ - Logs        │
+              │ - Executions  │
+              └───────────────┘
 ```
 
 **Characteristics:**
@@ -469,6 +478,12 @@ Every agent execution logs to Supabase:
 - Rationale: Each tool optimized for its purpose
 - Trade-off: Two systems to maintain
 - Review: If operational burden too high
+
+**2025-10-28: Built shared Supabase library before adding more agents**
+- Rationale: Create /lib/supabase.js with reusable logging functions to avoid duplicating code across agents
+- Implementation: Ada and Nova both use shared library for execution logging
+- Trade-off: Slightly more complex deployment (must copy library into workers) vs cleaner codebase
+- Review: When Wrangler CLI is implemented, imports will work natively
 
 ---
 
